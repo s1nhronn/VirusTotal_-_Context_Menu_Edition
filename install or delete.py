@@ -8,7 +8,7 @@ def add_to_registry(api_key: str):
     key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, r'*\shell\VirusTotal')
 
     winreg.SetValueEx(key, 'MUIVerb', None, winreg.REG_SZ, "Проверить на вирусы")
-    winreg.SetValueEx(key, 'Icon', None, winreg.REG_SZ, os.getcwd() + r'\virustotal-icon-lg.ico')
+    winreg.SetValueEx(key, 'Icon', None, winreg.REG_SZ, os.getcwd() + r'\VirusTotal.ico')
     winreg.SetValueEx(key, 'APIKEY', None, winreg.REG_SZ, api_key)
 
     path_to_script = os.path.abspath('main.exe')

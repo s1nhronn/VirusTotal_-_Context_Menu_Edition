@@ -2,9 +2,13 @@ import time
 import winreg
 import sys
 import traceback
+from contextlib import suppress
+from pprint import pprint
+
 import vt
 import colorama
-import multiprocessing
+import threading
+import hashlib
 
 
 # noinspection SpellCheckingInspection
@@ -23,14 +27,24 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-def loading_animation():
-    print(bcolors.BOLD, end='', flush=True)
-    while True:
+stop = False
+
+
+def load_animation():
+    while not stop:
+        if stop:
+            break
         print('\rСканируем полученный файл.  ', end='', flush=True)
         time.sleep(0.5)
+        if stop:
+            break
         print('\rСканируем полученный файл.. ', end='', flush=True)
         time.sleep(0.5)
+        if stop:
+            break
         print('\rСканируем полученный файл...', end='', flush=True)
+        if stop:
+            break
         time.sleep(0.5)
 
 
@@ -41,6 +55,7 @@ if __name__ == '__main__':
         # Получение файла из списка аргументов
         path = sys.argv[1]
         print(bcolors.HEADER + 'Файл: ' + path + bcolors.ENDC)
+        hash_ = hashlib.md5(open(path, 'rb').read()).hexdigest()
 
         # Получение API ключа и создание клиента
         try:
@@ -60,33 +75,52 @@ if __name__ == '__main__':
         api_key = winreg.QueryValueEx(key, 'APIKEY')[0]
         key.Close()
 
-        client = vt.Client(api_key)
-
         # Сканирование файла и вывод ответа
-        p = multiprocessing.Process(target=loading_animation)
+        print(bcolors.BOLD, end='')
+        p = threading.Thread(target=load_animation)
         p.start()
+        client = vt.Client(api_key)
+        with suppress(vt.error.APIError):
+            file_info = client.get_object('/files/' + hash_)
+            antivirus_results = file_info.to_dict()['attributes']['last_analysis_results']
+            stop = True
+            print(bcolors.BOLD + '\rПроверяем результаты...     ' + bcolors.ENDC)
+            dct = {}
+            for i in antivirus_results:
+                if antivirus_results[i]['result'] is not None:
+                    dct[i] = antivirus_results[i]
+            if dct:
+                print(bcolors.FAIL + 'В файле обнаружены вирусы!\n' + bcolors.ENDC)
+                print(bcolors.UNDERLINE + 'Антивирус: Тип угрозы' + bcolors.ENDC)
+                for i in dct:
+                    print(bcolors.OKGREEN + i + bcolors.ENDC + ': ' + bcolors.FAIL + dct[i]['result'] + bcolors.ENDC)
+            else:
+                print(bcolors.OKGREEN + 'В файле не обнаружены вирусы!' + bcolors.ENDC)
+
+            client.close()
+            print()
+            input('Press Enter to exit...')
+            sys.exit()
         with open(path, 'rb') as file:
             res = client.scan_file(file, wait_for_completion=True).to_dict()
         antivirus_results = res['attributes']['results']
-        p.terminate()
-        print('Сканируем полученный файл...' + bcolors.ENDC)
-        print(bcolors.OKGREEN + 'Готово' + bcolors.ENDC)
-        print(bcolors.BOLD + 'Проверяем результаты...' + bcolors.ENDC)
+        stop = True
+        print(bcolors.BOLD + '\rПроверяем результаты...     ' + bcolors.ENDC)
         dct = {}
         for i in antivirus_results:
             if antivirus_results[i]['result'] is not None:
                 dct[i] = antivirus_results[i]
         if dct:
             print(bcolors.FAIL + 'В файле обнаружены вирусы или трояны!\n' + bcolors.ENDC)
-            print(bcolors.UNDERLINE + 'Антивирус: Тип вируса/трояна' + bcolors.ENDC)
+            print(bcolors.UNDERLINE + 'Антивирус: Тип угрозы' + bcolors.ENDC)
             for i in dct:
                 print(bcolors.OKGREEN + i + bcolors.ENDC + ': ' + bcolors.FAIL + dct[i]['result'] + bcolors.ENDC)
         else:
             print(bcolors.OKGREEN + 'В файле не обнаружены вирусы!' + bcolors.ENDC)
 
         client.close()
-    except:
+    except Exception:
         print(bcolors.FAIL + 'Произошла ошибка!')
         print(traceback.format_exc() + bcolors.ENDC)
     print()
-    input('Press Enter to continue...')
+    input('Press Enter to exit...')
